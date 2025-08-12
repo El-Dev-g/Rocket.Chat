@@ -7,8 +7,6 @@ import { Emitter } from '@rocket.chat/emitter';
 import { imperativeModal } from '@rocket.chat/ui-client';
 import EJSON from 'ejson';
 import _ from 'lodash';
-import { Accounts } from 'meteor/accounts-base';
-import { Meteor } from 'meteor/meteor';
 
 import { E2EEState } from './E2EEState';
 import {
@@ -35,11 +33,12 @@ import { t } from '../../../app/utils/lib/i18n';
 import { createQuoteAttachment } from '../../../lib/createQuoteAttachment';
 import { getMessageUrlRegex } from '../../../lib/getMessageUrlRegex';
 import { isTruthy } from '../../../lib/isTruthy';
+import { accounts } from '../../meteor/facade/accounts';
 import { Messages, Rooms, Subscriptions } from '../../stores';
 import EnterE2EPasswordModal from '../../views/e2e/EnterE2EPasswordModal';
 import SaveE2EPasswordModal from '../../views/e2e/SaveE2EPasswordModal';
-import * as banners from '../banners';
 import type { LegacyBannerPayload } from '../banners';
+import * as banners from '../banners';
 import { dispatchToastMessage } from '../toast';
 import { mapMessageFromApi } from '../utils/mapMessageFromApi';
 
@@ -53,6 +52,12 @@ type KeyPair = {
 const ROOM_KEY_EXCHANGE_SIZE = 10;
 
 class E2E extends Emitter {
+	readonly PUBLIC_KEY = 'public_key' as const;
+
+	readonly PRIVATE_KEY = 'private_key' as const;
+
+	readonly RANDOM_PASSWORD_KEY = 'e2e.randomPassword' as const;
+
 	private started: boolean;
 
 	private instancesByRoomId: Record<IRoom['_id'], E2ERoom>;
@@ -269,7 +274,7 @@ class E2E extends Emitter {
 			return null;
 		}
 
-		const userId = Meteor.userId();
+		const userId = accounts.getUserId();
 		if (!this.instancesByRoomId[rid] && userId) {
 			this.instancesByRoomId[rid] = new E2ERoom(userId, room);
 		}
@@ -327,8 +332,8 @@ class E2E extends Emitter {
 
 	getKeysFromLocalStorage(): KeyPair {
 		return {
-			public_key: Accounts.storageLocation.getItem('public_key'),
-			private_key: Accounts.storageLocation.getItem('private_key'),
+			public_key: accounts.getStorage().getItem(this.PUBLIC_KEY),
+			private_key: accounts.getStorage().getItem(this.PRIVATE_KEY),
 		};
 	}
 
@@ -347,7 +352,7 @@ class E2E extends Emitter {
 					imperativeModal.close();
 				},
 				onConfirm: () => {
-					Accounts.storageLocation.removeItem('e2e.randomPassword');
+					accounts.getStorage().removeItem(this.RANDOM_PASSWORD_KEY);
 					this.setState(E2EEState.READY);
 					dispatchToastMessage({ type: 'success', message: t('End_To_End_Encryption_Enabled') });
 					this.closeAlert();
@@ -409,7 +414,7 @@ class E2E extends Emitter {
 			await this.persistKeys(this.getKeysFromLocalStorage(), await this.createRandomPassword());
 		}
 
-		const randomPassword = Accounts.storageLocation.getItem('e2e.randomPassword');
+		const randomPassword = accounts.getStorage().getItem(this.RANDOM_PASSWORD_KEY);
 		if (randomPassword) {
 			this.setState(E2EEState.SAVE_PASSWORD);
 			this.openAlert({
@@ -427,8 +432,8 @@ class E2E extends Emitter {
 		this.log('-> Stop Client');
 		this.closeAlert();
 
-		Accounts.storageLocation.removeItem('public_key');
-		Accounts.storageLocation.removeItem('private_key');
+		accounts.getStorage().removeItem(this.PUBLIC_KEY);
+		accounts.getStorage().removeItem(this.PRIVATE_KEY);
 		this.instancesByRoomId = {};
 		this.privateKey = undefined;
 		this.publicKey = undefined;
@@ -441,8 +446,8 @@ class E2E extends Emitter {
 	async changePassword(newPassword: string): Promise<void> {
 		await this.persistKeys(this.getKeysFromLocalStorage(), newPassword, { force: true });
 
-		if (Accounts.storageLocation.getItem('e2e.randomPassword')) {
-			Accounts.storageLocation.setItem('e2e.randomPassword', newPassword);
+		if (accounts.getStorage().getItem(this.RANDOM_PASSWORD_KEY)) {
+			accounts.getStorage().setItem(this.RANDOM_PASSWORD_KEY, newPassword);
 		}
 	}
 
@@ -463,13 +468,13 @@ class E2E extends Emitter {
 	}
 
 	async loadKeys({ public_key, private_key }: { public_key: string; private_key: string }): Promise<void> {
-		Accounts.storageLocation.setItem('public_key', public_key);
+		accounts.getStorage().setItem(this.PUBLIC_KEY, public_key);
 		this.publicKey = public_key;
 
 		try {
 			this.privateKey = await importRSAKey(EJSON.parse(private_key), ['decrypt']);
 
-			Accounts.storageLocation.setItem('private_key', private_key);
+			accounts.getStorage().setItem(this.PRIVATE_KEY, private_key);
 		} catch (error) {
 			this.setState(E2EEState.ERROR);
 			return this.error('Error importing private key: ', error);
@@ -492,7 +497,7 @@ class E2E extends Emitter {
 			const publicKey = await exportJWKKey(key.publicKey);
 
 			this.publicKey = JSON.stringify(publicKey);
-			Accounts.storageLocation.setItem('public_key', JSON.stringify(publicKey));
+			accounts.getStorage().setItem(this.PUBLIC_KEY, JSON.stringify(publicKey));
 		} catch (error) {
 			this.setState(E2EEState.ERROR);
 			return this.error('Error exporting public key: ', error);
@@ -501,7 +506,7 @@ class E2E extends Emitter {
 		try {
 			const privateKey = await exportJWKKey(key.privateKey);
 
-			Accounts.storageLocation.setItem('private_key', JSON.stringify(privateKey));
+			accounts.getStorage().setItem(this.PRIVATE_KEY, JSON.stringify(privateKey));
 		} catch (error) {
 			this.setState(E2EEState.ERROR);
 			return this.error('Error exporting private key: ', error);
@@ -516,7 +521,7 @@ class E2E extends Emitter {
 
 	async createRandomPassword(): Promise<string> {
 		const randomPassword = await generateMnemonicPhrase(5);
-		Accounts.storageLocation.setItem('e2e.randomPassword', randomPassword);
+		accounts.getStorage().setItem(this.RANDOM_PASSWORD_KEY, randomPassword);
 		return randomPassword;
 	}
 
@@ -553,7 +558,7 @@ class E2E extends Emitter {
 
 		// Derive a key from the password
 		try {
-			return await deriveKey(toArrayBuffer(Meteor.userId()), baseKey);
+			return await deriveKey(toArrayBuffer(accounts.getUserId()), baseKey);
 		} catch (error) {
 			this.setState(E2EEState.ERROR);
 			return this.error('Error deriving baseKey: ', error);
@@ -851,7 +856,7 @@ class E2E extends Emitter {
 		}
 
 		const predicate = (record: IRoom) =>
-			Boolean('usersWaitingForE2EKeys' in record && record.usersWaitingForE2EKeys?.every((user) => user.userId !== Meteor.userId()));
+			Boolean('usersWaitingForE2EKeys' in record && record.usersWaitingForE2EKeys?.every((user) => user.userId !== accounts.getUserId()));
 
 		const keyDistribution = async () => {
 			const roomIds = Rooms.state.filter(predicate).map((room) => room._id);
@@ -894,6 +899,6 @@ class E2E extends Emitter {
 
 export const e2e = new E2E();
 
-Accounts.onLogout(() => {
+accounts.onLogout(() => {
 	void e2e.stopClient();
 });
