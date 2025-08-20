@@ -78,6 +78,29 @@ class AccountsFacade {
 				}
 			});
 		});
+
+	private pendingEmailVerificationToken: string | undefined;
+
+	readonly attachEmailVerification = () => {
+		Accounts.onEmailVerificationLink((token: string) => {
+			this.pendingEmailVerificationToken = token;
+		});
+	};
+
+	readonly verifyEmailToken = () => {
+		return new Promise((resolve, reject) => {
+			const token = this.pendingEmailVerificationToken;
+			this.pendingEmailVerificationToken = undefined;
+
+			if (!token) return resolve(false);
+
+			Accounts.verifyEmail(token, (error) => {
+				if (error) return reject(error);
+
+				resolve(true);
+			});
+		});
+	};
 }
 
 /** @deprecated avoid consuming this directly */

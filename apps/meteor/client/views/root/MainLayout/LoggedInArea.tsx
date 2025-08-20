@@ -3,6 +3,7 @@ import { type ReactNode } from 'react';
 
 import { useCustomEmoji } from '../hooks/loggedIn/useCustomEmoji';
 import { useE2EEncryption } from '../hooks/loggedIn/useE2EEncryption';
+import { useEmailVerificationLink } from '../hooks/loggedIn/useEmailVerificationLink';
 import { useFingerprintChange } from '../hooks/loggedIn/useFingerprintChange';
 import { useFontStylePreference } from '../hooks/loggedIn/useFontStylePreference';
 import { useForceLogout } from '../hooks/loggedIn/useForceLogout';
@@ -44,6 +45,7 @@ const LoggedInArea = ({ children }: { children: ReactNode }) => {
 	//
 	useLogoutCleanup();
 	useE2EEncryption();
+	useEmailVerificationLink();
 
 	return children;
 };

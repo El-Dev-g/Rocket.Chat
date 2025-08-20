@@ -1,6 +1,8 @@
-import './serviceWorker';
-import './startup/accounts';
+import { accounts } from './meteor/facade/accounts';
 import './startup/fakeUserPresence';
+import './serviceWorker';
+
+accounts.attachEmailVerification();
 
 import('@rocket.chat/fuselage-polyfills')
 	.then(() => import('./meteor/overrides'))
