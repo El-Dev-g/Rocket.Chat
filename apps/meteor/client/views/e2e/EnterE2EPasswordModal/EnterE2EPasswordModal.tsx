@@ -1,9 +1,11 @@
-import { Box, PasswordInput, Field, FieldGroup, FieldRow, FieldError } from '@rocket.chat/fuselage';
+import { Box, PasswordInput, Field, FieldGroup, FieldRow, FieldError, FieldLink } from '@rocket.chat/fuselage';
 import { GenericModal } from '@rocket.chat/ui-client';
 import DOMPurify from 'dompurify';
-import { useEffect, useId } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
+
+import { useResetE2EPasswordMutation } from '../../hooks/useResetE2EPasswordMutation';
 
 type EnterE2EPasswordModalProps = {
 	onConfirm: (password: string) => void;
@@ -13,6 +15,9 @@ type EnterE2EPasswordModalProps = {
 
 const EnterE2EPasswordModal = ({ onConfirm, onClose, onCancel }: EnterE2EPasswordModalProps) => {
 	const { t } = useTranslation();
+	const [confirmResetPassword, setConfirmResetPassword] = useState(false);
+	const resetE2EPassword = useResetE2EPasswordMutation({ options: { onSettled: () => onClose() } });
+
 	const {
 		handleSubmit,
 		control,
@@ -30,11 +35,28 @@ const EnterE2EPasswordModal = ({ onConfirm, onClose, onCancel }: EnterE2EPasswor
 		setFocus('password');
 	}, [setFocus]);
 
+	if (confirmResetPassword) {
+		return (
+			<GenericModal
+				variant='warning'
+				title={t('Reset_E2EE_password')}
+				icon='warning'
+				confirmText={t('Reset_E2EE_password')}
+				onClose={onClose}
+				onCancel={onClose}
+				onConfirm={() => resetE2EPassword.mutate()}
+			>
+				Resetting will log you out and generate a new E2EE password upon logging back in. You’ll regain access to encrypted rooms with
+				online members, but not to those without any members online.
+			</GenericModal>
+		);
+	}
+
 	return (
 		<GenericModal
 			wrapperFunction={(props) => <Box is='form' onSubmit={handleSubmit(({ password }) => onConfirm(password))} {...props} />}
 			variant='warning'
-			title={t('Enter_E2E_password')}
+			title={t('Enter_your_E2E_password')}
 			icon='warning'
 			cancelText={t('Do_It_Later')}
 			confirmText={t('Enable_encryption')}
@@ -66,6 +88,18 @@ const EnterE2EPasswordModal = ({ onConfirm, onClose, onCancel }: EnterE2EPasswor
 							{errors.password.message}
 						</FieldError>
 					)}
+					<FieldRow alignSelf='end'>
+						<FieldLink
+							href='#'
+							target={undefined}
+							onClick={(e) => {
+								e.preventDefault();
+								setConfirmResetPassword(true);
+							}}
+						>
+							{t('Forgot_your_E2EE_Password')}
+						</FieldLink>
+					</FieldRow>
 				</Field>
 			</FieldGroup>
 		</GenericModal>

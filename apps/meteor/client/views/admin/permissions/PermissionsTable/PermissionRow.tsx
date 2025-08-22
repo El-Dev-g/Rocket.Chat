@@ -39,7 +39,7 @@ const PermissionRow = ({ permission, roleList, onGrant, onRemove }: PermissionRo
 	const [hovered, setHovered] = useState(false);
 	const changeRole = useChangeRole({ onGrant, onRemove, permissionId: _id });
 
-	const onMouseEnter = useEffectEvent(() => setHovered(true));
+	const onMouseEnter = useEffectEvent((e) => setHovered(true) && e.propagate());
 	const onMouseLeave = useEffectEvent(() => setHovered(false));
 
 	return (
